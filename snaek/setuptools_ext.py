@@ -13,6 +13,7 @@ from distutils import log
 from distutils.core import Extension
 from distutils.command.build_py import build_py
 from distutils.command.build_ext import build_ext
+from distutils.errors import DistutilsExecError, DistutilsSetupError
 from cffi.setuptools_ext import cffi_modules
 
 from ._compat import text_type
@@ -43,7 +44,6 @@ del os
 
 
 def error(msg):
-    from distutils.errors import DistutilsSetupError
     raise DistutilsSetupError(msg)
 
 
@@ -126,9 +126,14 @@ def build_rustlib(module_def, base_path):
     cmdline = ['cargo', 'build', '--release']
     if not sys.stdout.isatty():
         cmdline.append('--color=always')
-    rv = subprocess.Popen(cmdline, cwd=module_def.crate_path).wait()
+    try:
+        rv = subprocess.call(cmdline, cwd=module_def.crate_path)
+    except OSError as e:
+        raise DistutilsExecError("unable to execute %r: %s" %
+                                 (cmdline[0], e.strerror))
     if rv != 0:
-        sys.exit(rv)
+        raise DistutilsExecError("command %r failed with exit status %d" %
+                                 (cmdline[0], rv))
 
     src_path = os.path.join(module_def.crate_path, 'target', 'release')
     for filename in os.listdir(src_path):
